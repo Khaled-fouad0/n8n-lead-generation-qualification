@@ -73,16 +73,15 @@ Lead (HTTP POST)
 ##  Screenshots
 
 ### Workflow Overview
-![Workflow Overview](screenshots/workflow-overview.png)
-
+![Workflow Overview](workflow-overview.png)
 ### AI Email — Returning Customer (Memory System in Action)
-![Returning Customer Email](screenshots/email-returning.png)
+![Returning Customer Email](email-returning.png)
 
 ### AI Email — Fallback (When AI is Unavailable)
-![Fallback Email](screenshots/email-fallback.png)
+![Fallback Email](email-fallback.png)
 
 ### Security Test — Request Rejected Without Token
-![Security Test](screenshots/security-test.png)
+![Fallback Email](email-fallback.png)
 
 ---
 
