@@ -1,0 +1,1185 @@
+{
+  "name": "Lead Generation & Qualification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "c3ce0d9b-7af9-43fd-9096-e97fd030106e/lead-capture",
+        "authentication": "headerAuth",
+        "options": {
+          "responseCode": {
+            "values": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "dd6a2764-0460-4d4f-9c0d-2c23c324770e",
+      "name": "Webhook",
+      "webhookId": "c3ce0d9b-7af9-43fd-9096-e97fd030106e",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "6nXE6YoEX04uy14f",
+          "name": "Header Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $input.first().json.body;\nconst required = ['name', 'email', 'message'];\nconst missing = required.filter(field => !lead[field]);\n\nif (missing.length > 0) {\n  throw new Error(`Missing required fields: ${missing.join(', ')}`);\n}\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nif (!emailRegex.test(lead.email)) {\n  throw new Error(`Invalid email: ${lead.email}`);\n}\nreturn [{\n  json: {\n    lead_id: `LEAD-${Date.now()}`,\n    name: lead.name,\n    email: lead.email,\n    company: lead.company || 'Unknown',\n    role: lead.role || 'Unknown',\n    employees: lead.employees || 0,\n    message: lead.message,\n    source: lead.source || 'Website',\n    received_at: new Date().toISOString(),\n    status: 'new'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "83b3606a-b750-4f32-93a5-230a291e2def",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"temperature\": 0.3,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a lead qualification specialist. Return ONLY valid JSON, no extra text, no markdown, no backticks.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Qualify this lead:\\n\\nName: {{ $json.name }}\\nCompany: {{ $json.company }}\\nRole: {{ $json.role }}\\nEmployees: {{ $json.employees }}\\nMessage: {{ $json.message }}\\nSource: {{ $json.source }}\\n\\nCustomer History:\\n- Previous visits: {{ $json.previous_visits }}\\n- {{ $json.history_summary }}\\n\\n{{ $json.has_history ? 'This is a RETURNING customer - be more personal and reference their history' : 'This is a NEW customer' }}\\n\\nReturn ONLY this JSON:\\n{\\n  \\\"score\\\": 40,\\n  \\\"tier\\\": \\\"WARM\\\",\\n  \\\"reason\\\": \\\"brief reason\\\",\\n  \\\"pain_points\\\": [\\\"point1\\\", \\\"point2\\\"],\\n  \\\"recommended_action\\\": \\\"what to do next\\\",\\n  \\\"personalized_email_intro\\\": \\\"Dear Khaled, ...\\\"\\n}\\n\\nTiers: HOT (80-100) / WARM (50-79) / COLD (0-49)\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "58c95de1-f129-4989-9fb5-417051dd624d",
+      "name": "HTTP Request",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "groqApi": {
+          "id": "HPqV8Vvjvg1NGKa5",
+          "name": "Groq account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst aiContent = response.choices[0].message.content;\nconst lead = $('Code in JavaScript').first().json;\n\nlet qualification;\ntry {\n  qualification = JSON.parse(aiContent);\n} catch (e) {\n  throw new Error('AI did not return valid JSON: ' + aiContent);\n}\n\nreturn [{\n  json: {\n    ...lead,\n    score: qualification.score,\n    tier: qualification.tier,\n    reason: qualification.reason,\n    pain_points: qualification.pain_points,\n    recommended_action: qualification.recommended_action,\n    personalized_email_intro: qualification.personalized_email_intro\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        0
+      ],
+      "id": "e0417774-60cd-4f9c-816b-a92ea409fc70",
+      "name": "Code in JavaScript1",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.tier }}",
+                    "rightValue": "HOT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "609e9530-9d3d-403d-bd40-dcf2bb785907"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "0"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "bf7f8703-eabd-46e0-908d-ea40513d84fe",
+                    "leftValue": "={{ $json.tier }}",
+                    "rightValue": "WARM",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "1"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4e532b1c-6087-4c80-b381-d2174be01742",
+                    "leftValue": "={{ $json.tier }}",
+                    "rightValue": "COLD",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "2"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1872,
+        0
+      ],
+      "id": "6e3138dd-5816-4313-aae1-8c6c67355b4c",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "=Hi {{ $json.name }}, we got your message!",
+        "emailType": "text",
+        "message": "={{ $json.personalized_email_intro }}  We'd love to help you with: - {{ $json.pain_points[0] }} - {{ $json.pain_points[1] }}  Next step: {{ $json.recommended_action }}  Best regards, Your Support Team",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2160,
+        16
+      ],
+      "id": "7ea18ef8-f5e2-429a-a668-1b100a194a9e",
+      "name": "Send a message",
+      "webhookId": "c2d08c9b-2eb9-436e-b545-ac4253788431",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "HGEG0HIV5E5pGEOi",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU",
+          "mode": "list",
+          "cachedResultName": "Leads CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "الورقة1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Lead ID": "={{ $json.lead_id }}",
+            "Name": "={{ $json.name }}",
+            "Email": "={{ $json.email }}",
+            "Company": "={{ $json.company }}",
+            "Score": "={{ $json.score }}",
+            "Tier": "={{ $json.tier }}",
+            "Reason": "={{ $json.reason }}",
+            "Pain Points": "={{ $json.pain_points }}",
+            "Action": "={{ $json.recommended_action }}",
+            "Date": "={{ $json.received_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Lead ID",
+              "displayName": "Lead ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Score",
+              "displayName": "Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tier",
+              "displayName": "Tier",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reason",
+              "displayName": "Reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Pain Points",
+              "displayName": "Pain Points",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Action",
+              "displayName": "Action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2720,
+        48
+      ],
+      "id": "fac343a8-cfa6-4003-ba47-806e234f87bb",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qSMMp6oABSUrKXLf",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst lead = $('Code in JavaScript1').first().json;\n\nreturn [{\n  json: {\n    lead_id: lead.lead_id,\n    name: lead.name,\n    email: lead.email,\n    company: lead.company,\n    score: lead.score,\n    tier: lead.tier,\n    reason: lead.reason,\n    pain_points: lead.pain_points.join(', '),\n    recommended_action: lead.recommended_action,\n    received_at: lead.received_at\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2416,
+        32
+      ],
+      "id": "b7034216-fc45-472c-8f3a-270bfdae8b43",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.name }}, let's talk!",
+        "emailType": "text",
+        "message": "={{ $json.personalized_email_intro }}\n\nThis is a priority for us — we'd love to schedule \na call within 24 hours.\n\nYour pain points we can solve:\n- {{ $json.pain_points[0] }}\n- {{ $json.pain_points[1] }}\n\nBook a call now: [your calendar link]\n\nBest regards,\nYour Team",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2112,
+        -112
+      ],
+      "id": "c46a48d3-6ded-4dd7-8220-eeccf7782a3f",
+      "name": "Send a message1",
+      "webhookId": "c2d08c9b-2eb9-436e-b545-ac4253788431",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "HGEG0HIV5E5pGEOi",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "=Hi {{ $json.name }}, some resources for you",
+        "emailType": "text",
+        "message": "={{ $json.personalized_email_intro }}\n\nWe thought these resources might help you:\n- [Blog post link]\n- [Case study link]\n\nFeel free to reach out anytime.\n\nBest regards,\nYour Team",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2144,
+        192
+      ],
+      "id": "24876ce7-4bdc-45d7-8688-38c72d495221",
+      "name": "Send a message2",
+      "webhookId": "c2d08c9b-2eb9-436e-b545-ac4253788431",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "HGEG0HIV5E5pGEOi",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst lead = $('Code in JavaScript1').first().json;\n\nreturn [{\n  json: {\n    lead_id: lead.lead_id,\n    name: lead.name,\n    email: lead.email,\n    company: lead.company,\n    score: lead.score,\n    tier: lead.tier,\n    reason: lead.reason,\n    pain_points: lead.pain_points.join(', '),\n    recommended_action: lead.recommended_action,\n    received_at: lead.received_at\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2368,
+        192
+      ],
+      "id": "1eeb50e0-9adb-4969-9998-bdbdd77b8847",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst lead = $('Code in JavaScript1').first().json;\n\nreturn [{\n  json: {\n    lead_id: lead.lead_id,\n    name: lead.name,\n    email: lead.email,\n    company: lead.company,\n    score: lead.score,\n    tier: lead.tier,\n    reason: lead.reason,\n    pain_points: lead.pain_points.join(', '),\n    recommended_action: lead.recommended_action,\n    received_at: lead.received_at\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2368,
+        -112
+      ],
+      "id": "9a1468bc-b795-47d0-a5c8-b3689ede813f",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU",
+          "mode": "list",
+          "cachedResultName": "Leads CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "الورقة1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Lead ID": "={{ $json.lead_id }}",
+            "Name": "={{ $json.name }}",
+            "Email": "={{ $json.email }}",
+            "Company": "={{ $json.company }}",
+            "Score": "={{ $json.score }}",
+            "Tier": "={{ $json.tier }}",
+            "Reason": "={{ $json.reason }}",
+            "Pain Points": "={{ $json.pain_points }}",
+            "Action": "={{ $json.recommended_action }}",
+            "Date": "={{ $json.received_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Lead ID",
+              "displayName": "Lead ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Score",
+              "displayName": "Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tier",
+              "displayName": "Tier",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reason",
+              "displayName": "Reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Pain Points",
+              "displayName": "Pain Points",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Action",
+              "displayName": "Action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2672,
+        208
+      ],
+      "id": "277d05af-5596-4ae2-9f40-28ef6d394fae",
+      "name": "Append row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qSMMp6oABSUrKXLf",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU",
+          "mode": "list",
+          "cachedResultName": "Leads CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "الورقة1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Lead ID": "={{ $json.lead_id }}",
+            "Name": "={{ $json.name }}",
+            "Email": "={{ $json.email }}",
+            "Company": "={{ $json.company }}",
+            "Score": "={{ $json.score }}",
+            "Tier": "={{ $json.tier }}",
+            "Reason": "={{ $json.reason }}",
+            "Pain Points": "={{ $json.pain_points }}",
+            "Action": "={{ $json.recommended_action }}",
+            "Date": "={{ $json.received_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Lead ID",
+              "displayName": "Lead ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Score",
+              "displayName": "Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tier",
+              "displayName": "Tier",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reason",
+              "displayName": "Reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Pain Points",
+              "displayName": "Pain Points",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Action",
+              "displayName": "Action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2672,
+        -96
+      ],
+      "id": "ea4dd7e7-8ad0-4e36-ae6e-1033688ef61c",
+      "name": "Append row in sheet2",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qSMMp6oABSUrKXLf",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "feb74f5d-3eb5-443b-94b7-51f9fd5aa51b",
+              "leftValue": "={{ $json.choices[0].message.content }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1456,
+        0
+      ],
+      "id": "0468613c-c4c3-44dc-8674-0326359117a6",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email || $('Code in JavaScript').first().json.email }}",
+        "subject": "=We received your message, {{ $json.name }}!",
+        "emailType": "text",
+        "message": "=Hi {{ $json.name }},  Thank you for reaching out! We received your message and our team  will get back to you within 24 hours.  Best regards, Your Support Team",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1632,
+        208
+      ],
+      "id": "3bfc62f5-3587-4875-8e6e-0c388949e7e8",
+      "name": "Send a message3",
+      "webhookId": "f2f2e316-6f8a-4741-9c2a-1dfb19fe0852",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "HGEG0HIV5E5pGEOi",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU",
+          "mode": "list",
+          "cachedResultName": "Leads CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "الورقة1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Lead ID": "={{ $json.lead_id }}",
+            "Name": "={{ $json.name }}",
+            "Email": "={{ $json.email }}",
+            "Company": "={{ $json.company }}",
+            "Score": "0",
+            "Tier": "PENDING REVIEW",
+            "Reason": "AI unavailable - manual review needed",
+            "Action": "Manual follow-up required",
+            "Date": "={{ $json.received_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Lead ID",
+              "displayName": "Lead ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Score",
+              "displayName": "Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tier",
+              "displayName": "Tier",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reason",
+              "displayName": "Reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Pain Points",
+              "displayName": "Pain Points",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Action",
+              "displayName": "Action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1904,
+        224
+      ],
+      "id": "5166f579-c62e-4d4a-bc6d-39f0b7edeba0",
+      "name": "Append row in sheet3",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qSMMp6oABSUrKXLf",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU",
+          "mode": "list",
+          "cachedResultName": "Leads CRM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "الورقة1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Xb5IaHSurbVNbLBWjIZ713koL_GkSmsvcWr4193OOeU/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Email",
+              "lookupValue": "={{ $json.email }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        416,
+        0
+      ],
+      "id": "87a1816b-83f7-4d25-a591-18173eff3206",
+      "name": "Get row(s) in sheet",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qSMMp6oABSUrKXLf",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst lead = $('Code in JavaScript').first().json;\n\nconst hasHistory = items.length > 0 && items[0].json['Lead ID'];\n\nlet history_summary, previous_visits, has_history;\n\nif (hasHistory) {\n  const lastThree = items.slice(-3);\n  history_summary = lastThree.map((row, i) => \n    `Visit ${i+1}: ${String(row.json['Action']).replace(/[\"\\n\\r]/g, '')} | Tier: ${row.json['Tier']}`\n  ).join(' /// ');\n  previous_visits = items.length;\n  has_history = true;\n} else {\n  history_summary = 'New customer - no previous history';\n  previous_visits = 0;\n  has_history = false;\n}\nreturn [{\n  json: {\n    ...lead,\n    has_history,\n    previous_visits,\n    history_summary\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "35563f09-8dc6-4951-9783-f5e0d73cb91e",
+      "name": "Code in JavaScript7"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message3": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript7": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "YmWSQyetuydEON9j",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "ba3ba4a3-4683-468f-a508-61f290fb8729",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "126afa01b62ab25cdc467e77c148066a2958e76500cc2ab27945094c71172101"
+  },
+  "id": "47dnm6LMykR5GuKM",
+  "tags": []
+}
