@@ -81,7 +81,7 @@ Lead (HTTP POST)
 ![Fallback Email](email-fallback.png)
 
 ### Security Test — Request Rejected Without Token
-
+![Security Test](security-test.png)
 
 ---
 
